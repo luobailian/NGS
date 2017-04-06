@@ -16,7 +16,7 @@ import scala.collection.mutable.ArrayBuffer
 object FastQCTrims {
   def LoadTrims(inputpath: String, inputpath2: String, core_standard: Int, len_standard: Int, outputPath:
   String, outputPath2: String, outputQC: String, isLocal: Boolean, QCandTrim: Int,partitionNum:Int): Unit = {
-    Logger.getLogger("org").setLevel(Level.ERROR)
+    //Logger.getLogger("org").setLevel(Level.ERROR)
     val name = "FastQCTrims"
     val conf = new SparkConf().setAppName(name)
     if (isLocal) {

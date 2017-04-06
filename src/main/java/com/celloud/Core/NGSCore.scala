@@ -60,6 +60,8 @@ object NGSCore {
     var linecount = 0
     //snap paired 数据库 –t 每个并行度的线程数  -I -pairedInterleavedFastq -  -o 结果文件
     val commd= snapPath+" paired "+databasepath+" -t "+threadsNumber+"  -I -pairedInterleavedFastq -  -o -sam -"
+    val samtoolcommond = samtoolsPath+" -"
+
     //开始计算
     val disRDD = file1.union(file2).map { lines =>
       val resline = fastqTrimUtil.readlines(lines, accu, linecount)
@@ -80,22 +82,44 @@ object NGSCore {
       if (length1.equals("2")) str += linestr //1的文件
       if (length2.equals("2")) str += linestr2 //2的文件
       str
-    }.pipe(commd).filter(x=> x.split(spiltstr)(2).toString!="*").coalesce(1).cache()
-    disRDD.count()//缓存
-    val titleRDD= disRDD.filter(x=> x.startsWith("@")).distinct().collect()
+    }.pipe(commd).filter(x=> x.split(spiltstr)(2).toString!="*").coalesce(1).cache()   //.coalesce(1)
 
-    val samtoolRDD = disRDD.filter(x=> !x.startsWith("@"))
-      .sortBy(_.split(spiltstr)(3).toInt)
-      .groupBy(_.split(spiltstr)(2))
-      .collect()
-    //命令 /share/biosoft/Software/samtools-1.2/samtools mpileup  -f /share/biosoft/Database/HG_19/hg19.fasta -
-     val samtoolcommond = samtoolsPath+" -"
-    val size= samtoolRDD.length
-    var i=0
-    while(i<size){
-      //加入头文件
-      sc.makeRDD(titleRDD).union(sc.makeRDD(samtoolRDD(i)._2.toList)).coalesce(1).pipe(samtoolcommond).saveAsTextFile(outputpath+i)
-      i+=1
+    val titleRDD= disRDD.filter(x=> x.startsWith("@")).distinct().sortBy(_.split(spiltstr)(1)).collect()
+    println("------------客户端设置的partition------------"+partitionNum)
+
+    var strBuf = new StringBuffer()
+    for (i <- titleRDD.indices) {
+      val lines = titleRDD(i)+ Constant.linefeed
+      strBuf.append(lines)
     }
+    val titlesort = strBuf.toString.replace("unsorted","sorted")
+    val broadcastStr= sc.broadcast(titlesort.substring(0,titlesort.length- Constant.linefeed.length))
+
+    val groupsSort = disRDD.filter(x=> !x.startsWith("@"))
+      .filter(x=> x.split(spiltstr)(2).toString!="*")
+      .groupBy(_.split(spiltstr)(2)).sortBy(_._1)
+    disRDD.unpersist()  //清除缓存
+
+    groupsSort.mapPartitions({ iter =>
+      var result = List[String]()
+      var reslist=""
+      while (iter.hasNext){
+        val p = iter.next()._2.toList
+        var c = 0
+        val sortValues= p.sortBy(_.split(spiltstr)(3).toInt).take(p.size)
+        var strres = new StringBuffer()
+        while(c< sortValues.size){
+          strres.append(sortValues(c)+Constant.linefeed )
+          c+=1
+        }
+        //val reslist =strres.toString.substring(0,strres.length- Constant.linefeed.length)
+        reslist+= strres.toString
+      }
+      result ::= (reslist.toString.substring(0,reslist.length- Constant.linefeed.length))
+      result ::= (broadcastStr.value.toString) //头
+      result.iterator
+    },true)
+      .pipe(samtoolcommond)
+      .saveAsTextFile(outputpath)
   }
 }

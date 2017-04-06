@@ -1,8 +1,10 @@
 package com.celloud.Core
 
 import com.celloud.Utils.{Constant, fastqTrimUtil}
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.log4j.{Logger, Level}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.storage.StorageLevel
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -34,30 +36,28 @@ object FastSNAP {
     val accu = ArrayBuffer[String]()
      var linecount = 1
 
-val res = file1.union(file2).map { lines =>
-  val resline =fastqTrimUtil.readlines(lines,accu,linecount)
-  linecount=resline._1
-  resline._2
-}.filter { x => x.toString().length() > 2 }.groupBy { x =>
-  x.toString().split(linefeed)(0).split(headspilt)(0)
-}.filter(x =>
-  x._2.count { x => true } == 2
-).map { x =>
-      var str=""
-        val linestr = x._2.toList(0) //
-        val linestr2 = x._2.toList(1)
-        val length1 = linestr.split(linefeed)(0).split(headspilt)(1).substring(0, 1)
-        val length2 = linestr2.split(linefeed)(0).split(headspilt)(1).substring(0, 1)
-        if (length1.equals("1")) str += linestr + linefeed
-        if (length2.equals("1")) str += linestr2 + linefeed //2的文件
-        if (length1.equals("2")) str += linestr //1的文件
-        if (length2.equals("2")) str += linestr2 //2的文件
-       str
-     }.pipe(commd)
-  //.coalesce(1, true).filter(x=> x.split(Constant.tab)(2).toString!="*").distinct()
+    val res = file1.union(file2).map { lines =>
+      val resline =fastqTrimUtil.readlines(lines,accu,linecount)
+      linecount=resline._1
+      resline._2
+    }.filter { x => x.toString().length() > 2 }.groupBy { x =>
+      x.toString().split(linefeed)(0).split(headspilt)(0)
+    }.filter(x =>
+      x._2.count { x => true } == 2
+    ).map { x =>
+          var str=""
+            val linestr = x._2.toList(0) //
+            val linestr2 = x._2.toList(1)
+            val length1 = linestr.split(linefeed)(0).split(headspilt)(1).substring(0, 1)
+            val length2 = linestr2.split(linefeed)(0).split(headspilt)(1).substring(0, 1)
+            if (length1.equals("1")) str += linestr + linefeed
+            if (length2.equals("1")) str += linestr2 + linefeed //2的文件
+            if (length1.equals("2")) str += linestr //1的文件
+            if (length2.equals("2")) str += linestr2 //2的文件
+           str
+         }.pipe(commd)
+       //.filter(x=> x.split(Constant.tab)(2).toString!="*").distinct()
      .saveAsTextFile(outputPath)
-
-
 
 
    /* .foreachPartition{ x =>
